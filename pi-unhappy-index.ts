@@ -3,9 +3,8 @@
  *
  * Watches bash results for commands that sneakily do, in the shell, what one
  * of pi's pre-configured tools exists to do, and prepends one short reminder
- * per caught watch so the model sees it. One watch per route back to a tool
- * (edit gets two: shell in-place and python, whose real target is scripted
- * file mutation):
+ * per caught watch so the model sees it. One watch per tool (read, edit,
+ * write, grep, find, ls), with python classified under edit:
  *
  *   read        cat / head / tail        → Use the `read` tool to read.
  *   edit        sed -i / perl -i         → Use the `edit` tool to edit.

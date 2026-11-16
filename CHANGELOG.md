@@ -2,12 +2,10 @@
 
 ## [0.2.1]
 
-- python routes back to `edit` only (was read+edit): its real target is
-  scripted file mutation — reading through python is usually legitimate
-  data processing that no dedicated tool replaces. The watch fires only
-  while the edit tool is active, and reads "Do not edit files with
-  `python`. Use the `edit` tool to edit." at all times, with no more
-  conditional tool naming.
+- python is classified under `edit`: any `python`/`python3` in a bash
+  command counts as an edit substitution — one hint, one unhappy bump —
+  exactly like every other watch. (Previously it pointed at read+edit
+  together.)
 
 ## [0.2.0]
 

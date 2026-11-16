@@ -3,8 +3,8 @@
 A minimal pi coding agent extension. When a bash command sneakily does, in
 the shell, what one of pi's pre-configured tools exists to do, the extension
 prepends one reminder per caught watch to the tool result so the model sees
-it. One watch per route back to a tool (edit gets two: shell in-place and
-python, whose real target is scripted file mutation):
+it. One watch per tool (read, edit, write, grep, find, ls), with python
+classified under edit:
 
 ```
 hint: Do not read files with `cat`, `head`, or `tail`. Use the `read` tool to read.

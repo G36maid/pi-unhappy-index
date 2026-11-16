@@ -140,17 +140,13 @@ describe("arming from the active toolset", () => {
     expect(hintsFor("cat x", ["read", "bash"])).toHaveLength(1);
   });
 
-  test("python routes back to edit only, whatever else is active", () => {
-    const both = hintsFor("python3 script.py", ["read", "edit", "bash"])[0];
-    expect(both).toContain("`edit` tool to edit");
-    expect(both).not.toContain("`read`");
+  test("python is classified under edit, like any watch targets its tool", () => {
+    const armed = hintsFor("python3 script.py", ["read", "edit", "bash"])[0];
+    expect(armed).toContain("`edit` tool to edit");
+    expect(armed).not.toContain("`read`");
 
-    // read-only toolset: python-as-reader is data processing, not sneaking
+    // edit tool inactive: the python watch sits it out, same rule as every watch
     expect(hintsFor("python3 script.py", ["read", "bash"])).toEqual([]);
-
-    const editOnly = hintsFor("python3 script.py", ["edit", "bash"])[0];
-    expect(editOnly).toContain("`edit` tool to edit");
-    expect(editOnly).not.toContain("`read`");
 
     expect(hintsFor("python3 script.py", ["bash"])).toEqual([]);
   });
