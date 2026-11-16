@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.0]
+
+Back to the original shape, minus grep — exactly two watches remain:
+
+- `cat` → read
+- `python` → edit (the heredoc after an edit wall; the reason this
+  extension exists)
+
+Removed the grep/rg, head/tail, sed -i/perl, tee/dd, find/fd, and ls
+watches added in 0.2.0. Session data said why: piped grep is the happy
+path (verification half of the edit loop), head/tail mostly truncate
+output, sed is mostly range reads, ls does not affect model behavior, and
+happy usage cannot be enumerated — a minimal list keeps `[unhappy=N]`
+counting the thing that matters. Arming from the live toolset stays.
+
 ## [0.2.1]
 
 - python is classified under `edit`: any `python`/`python3` in a bash

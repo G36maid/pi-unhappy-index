@@ -1,76 +1,48 @@
 # pi-unhappy-index
 
-A minimal pi coding agent extension. When a bash command sneakily does, in
-the shell, what one of pi's pre-configured tools exists to do, the extension
-prepends one reminder per caught watch to the tool result so the model sees
-it. One watch per tool (read, edit, write, grep, find, ls), with python
-classified under edit:
+A minimal pi coding agent extension. Two watches, one nudge each:
 
 ```
-hint: Do not read files with `cat`, `head`, or `tail`. Use the `read` tool to read.
-hint: Do not edit files in place with `sed` or `perl`. Use the `edit` tool to edit.
+hint: Do not read files with `cat`. Use the `read` tool to read.
 hint: Do not edit files with `python`. Use the `edit` tool to edit.
-hint: Do not create or overwrite files with `tee` or `dd`. Use the `write` tool to write.
-hint: Do not search files with `grep` or `rg`. Use the `grep` tool to search.
-hint: Do not search for files with `find` or `fd`. Use the `find` tool to find.
-hint: Do not list directories with `ls`. Use the `ls` tool to list.
 ```
 
-Each hint states its own rule directly and names the replacement tool, so
-the model routes itself. A command matching several watches gets one line
-per watch. No command analysis beyond the trigger regexes, on purpose: a
-false trigger costs one line of tokens and nothing else — the command still
-runs and its output is preserved.
+The python watch is the point: when the edit tool hits a wall (exact
+content match, stale after format/lint), the model reaches for a python
+heredoc, edits markdown badly, stops using edit for the rest of the
+session, and chains straight into git commit. Catching the heredoc is
+catching the loop at its head.
 
-Getting caught also bumps the unhappy index: the first reminder line starts
+Getting caught bumps the unhappy index: the first reminder line starts
 with `[unhappy=N]`, where N is the number of catches so far this session.
-The number is the fun part — and a visible streak the model can read.
+
+## Why only two watches
+
+This is not enforcement — on Linux any of it can be bypassed, and the set
+of bash usages that would actually be the right call (piped grep for
+verification, head/tail on logs, sed for range reads, ls, find) cannot be
+enumerated. So the list stays minimal: a false trigger costs one line of
+tokens and is itself a small expression of displeasure, while every extra
+watch dilutes the counter until it counts nothing in particular. Keep the
+list at two and `[unhappy=N]` mostly counts the thing that matters.
 
 ## Toolset-aware arming
 
-The watch table is not hardcoded to a fixed toolset. Every `tool_result`
-re-checks `pi.getActiveTools()`, and a watch is armed only while at least
-one of its target tools is active. Consequences:
-
-- **No pointing at dead tools.** pi's own system-prompt rules sanction bash
-  for file operations when the dedicated tools are absent (`defaultTools`,
-  `--tools`, or `setActiveTools` all respected). With `grep` inactive, an
-  `rg` in bash is sanctioned — no hint fires, and the unhappy index does not
-  move.
-- **Hints stay truthful.** Reminders name only tools that are actually
-  active; a watch pointing at several tools arms while any one of them is
-  active and its reminder names just the active ones.
-- **Dynamic loadouts work without a reload.** Package-registered tools and
-  mid-session `setActiveTools` changes are picked up by the next result.
-
-If the running core exposes no `getActiveTools()`, every watch arms,
-matching the pre-toolset behavior.
-
-The arming source is `getActiveTools()` rather than `getAllTools()` on
-purpose: `getAllTools()` lists every registered tool including inactive ones
-(a deactivated built-in stays registered), but only active tools are
-callable by the model, so only they are worth naming in a hint.
+Each `tool_result` re-checks `pi.getActiveTools()`; a watch fires only
+while its target tool is active. When `read` or `edit` is removed from the
+toolset, pi's own rules sanction bash for those operations, and a hint
+pointing at a tool the model cannot call is just noise. If the running
+core exposes no `getActiveTools()`, both watches arm.
 
 ## How it works
 
-A single `tool_result` hook. The event already carries both the command
-(`event.input.command`) and the result content, so no cross-event state is
-needed. The handler re-reads the active toolset, runs the command through
-`hintsFor`, which tests the `WATCHES` table (one entry per tool being routed
-back to) and returns the matching reminder lines; each is prepended as its
-own text block, and the original output follows untouched. The first block
-carries the `[unhappy=N]` tag.
-
-The unhappy index is a plain in-memory counter: bumped once per caught
-command (multi-watch matches count as one catch), reset on `session_start`,
-`/reload`, or a process restart. Nothing is persisted.
-
-Skipped on purpose:
-
-- failed commands (`isError`) — the model already got an error
-- nested calls (`parentToolCallId` set) — those results feed a script, not
-  the model
-- `powershell` results — bash only; that is where the sneaking happens
+A single `tool_result` hook. The command (`event.input.command`) runs
+through `hintsFor`, matching the two watch regexes; each reminder is
+prepended as its own text block, original output untouched, `[unhappy=N]`
+on the first line. In-memory counter: reset on `session_start`, `/reload`,
+or process restart. Skipped on purpose: failed commands (`isError`),
+nested calls (`parentToolCallId` — results feed a script, not the model),
+and non-bash tools.
 
 ## Install
 
