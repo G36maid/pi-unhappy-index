@@ -1,0 +1,16 @@
+{
+  "name": "pi-unhappy-index",
+  "version": "0.1.0",
+  "description": "Nudges the model from cat/python/grep/rg bash substitutions back to the read/edit/grep tools, and keeps an unhappy index of every catch.",
+  "keywords": ["pi-package"],
+  "type": "module",
+  "scripts": {
+    "test": "bun test"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": ["./pi-unhappy-index.ts"]
+  }
+}
