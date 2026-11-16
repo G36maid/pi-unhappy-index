@@ -17,7 +17,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 export const TRIGGER = /\bcat\b|\bpython3?\b/;
 
 export const MESSAGE =
-  "read-edit-hint: If you are reading, must use the read tool. If you are editing, must use the edit tool.";
+  "hint: If you are reading, must use the `read` tool. If you are editing, must use the `edit` tool.";
 
 export function shouldHint(command: unknown): boolean {
   return typeof command === "string" && TRIGGER.test(command);
