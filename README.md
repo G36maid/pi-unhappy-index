@@ -5,11 +5,12 @@ A minimal pi coding agent extension. When a bash command involves `cat` or
 model sees it:
 
 ```
-read-edit-hint: If you are reading, you must use the read tool. If you are editing, you must use the edit tool.
+read-edit-hint: Do not read or edit files with `cat` or `python`. Use the `read` tool to read and the `edit` tool to edit.
 ```
 
-The message is deliberately conditional. The model knows whether it is
-reading or editing, so it routes itself to the right tool. No command
+The message states the rule directly — no `cat`/`python` for reading or
+editing — and points at the right tool for each intent, so the model
+routes itself. No command
 analysis beyond a trigger regex, on purpose: a false trigger costs one line
 of tokens and nothing else — the command still runs and its output is
 preserved.
