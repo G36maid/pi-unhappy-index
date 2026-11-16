@@ -30,7 +30,7 @@ describe("shouldHint", () => {
 
 describe("MESSAGE", () => {
   test("names both required tools", () => {
-    expect(MESSAGE).toContain("read tool");
-    expect(MESSAGE).toContain("edit tool");
+    expect(MESSAGE).toContain("`read`");
+    expect(MESSAGE).toContain("`edit`");
   });
 });
