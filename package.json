@@ -1,6 +1,6 @@
 {
   "name": "pi-unhappy-index",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Watches bash results for sneaky shell substitutions of any pre-configured pi tool (read/edit/write/grep/find/ls/python), arming from the live toolset, and keeps an unhappy index of every catch.",
   "keywords": ["pi-package"],
   "type": "module",

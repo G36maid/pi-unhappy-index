@@ -3,17 +3,17 @@
 A minimal pi coding agent extension. When a bash command sneakily does, in
 the shell, what one of pi's pre-configured tools exists to do, the extension
 prepends one reminder per caught watch to the tool result so the model sees
-it. One watch per tool being routed back to (plus python, which substitutes
-for read and edit at once):
+it. One watch per route back to a tool (edit gets two: shell in-place and
+python, whose real target is scripted file mutation):
 
 ```
 hint: Do not read files with `cat`, `head`, or `tail`. Use the `read` tool to read.
 hint: Do not edit files in place with `sed` or `perl`. Use the `edit` tool to edit.
+hint: Do not edit files with `python`. Use the `edit` tool to edit.
 hint: Do not create or overwrite files with `tee` or `dd`. Use the `write` tool to write.
 hint: Do not search files with `grep` or `rg`. Use the `grep` tool to search.
 hint: Do not search for files with `find` or `fd`. Use the `find` tool to find.
 hint: Do not list directories with `ls`. Use the `ls` tool to list.
-hint: Do not read or edit files with `python`. Use the `read` tool to read and the `edit` tool to edit.
 ```
 
 Each hint states its own rule directly and names the replacement tool, so
@@ -37,8 +37,9 @@ one of its target tools is active. Consequences:
   `--tools`, or `setActiveTools` all respected). With `grep` inactive, an
   `rg` in bash is sanctioned — no hint fires, and the unhappy index does not
   move.
-- **Multi-target hints shrink.** The python hint names only the tools that
-  are actually active: `read` only when the `edit` tool is gone.
+- **Hints stay truthful.** Reminders name only tools that are actually
+  active; a watch pointing at several tools arms while any one of them is
+  active and its reminder names just the active ones.
 - **Dynamic loadouts work without a reload.** Package-registered tools and
   mid-session `setActiveTools` changes are picked up by the next result.
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.1]
+
+- python routes back to `edit` only (was read+edit): its real target is
+  scripted file mutation — reading through python is usually legitimate
+  data processing that no dedicated tool replaces. The watch fires only
+  while the edit tool is active, and reads "Do not edit files with
+  `python`. Use the `edit` tool to edit." at all times, with no more
+  conditional tool naming.
+
 ## [0.2.0]
 
 Toolset-aware upgrade. The extension now watches every pre-configured tool,
