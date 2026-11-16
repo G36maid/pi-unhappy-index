@@ -3,16 +3,17 @@
  *
  * Watches bash results for commands that sneakily do, in the shell, what one
  * of pi's pre-configured tools exists to do, and prepends one short reminder
- * per caught watch so the model sees it. One watch per tool being routed
- * back to (plus python, which substitutes for read and edit at once):
+ * per caught watch so the model sees it. One watch per route back to a tool
+ * (edit gets two: shell in-place and python, whose real target is scripted
+ * file mutation):
  *
  *   read        cat / head / tail        → Use the `read` tool to read.
  *   edit        sed -i / perl -i         → Use the `edit` tool to edit.
+ *   edit        python                   → Use the `edit` tool to edit.
  *   write       tee / dd of=             → Use the `write` tool to write.
  *   grep        grep / rg                → Use the `grep` tool to search.
  *   find        find / fd                → Use the `find` tool to find.
  *   ls          ls                       → Use the `ls` tool to list.
- *   read + edit python                   → Use the `read`/`edit` tools.
  *
  * Watches arm from the live toolset, not a hardcoded list: every result
  * re-checks `pi.getActiveTools()`, and a watch is armed only while at least
@@ -43,7 +44,7 @@ export interface Watch {
   offense: string;
 }
 
-/** One watch per pre-configured tool (python covers read+edit); array order is the prepend order. */
+/** One watch per route back to a pre-configured tool; array order is the prepend order. */
 export const WATCHES: Watch[] = [
   {
     targets: ["read"],
@@ -55,6 +56,11 @@ export const WATCHES: Watch[] = [
     trigger:
       /\bsed\b[^|;&>]*\s(?:-i\b|--in-place\b)|\bperl\d*\b[^|;&>]*\s-(?:pin|pi|i)\b/,
     offense: "edit files in place with `sed` or `perl`",
+  },
+  {
+    targets: ["edit"],
+    trigger: /\bpython3?\b/,
+    offense: "edit files with `python`",
   },
   {
     targets: ["write"],
@@ -75,11 +81,6 @@ export const WATCHES: Watch[] = [
     targets: ["ls"],
     trigger: /\bls\b/,
     offense: "list directories with `ls`",
-  },
-  {
-    targets: ["read", "edit"],
-    trigger: /\bpython3?\b/,
-    offense: "read or edit files with `python`",
   },
 ];
 

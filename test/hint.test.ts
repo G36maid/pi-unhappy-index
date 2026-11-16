@@ -88,9 +88,9 @@ describe("hintsFor", () => {
     ]) {
       const hints = hintsFor(cmd);
       expect(hints).toHaveLength(1);
-      expect(hints[0]).toContain("`python`");
-      expect(hints[0]).toContain("`read`");
-      expect(hints[0]).toContain("`edit`");
+      expect(hints[0]).toContain("edit files with `python`");
+      expect(hints[0]).toContain("`edit` tool to edit");
+      expect(hints[0]).not.toContain("`read`");
       expect(hints[0]).not.toContain("`grep`");
     }
   });
@@ -140,27 +140,34 @@ describe("arming from the active toolset", () => {
     expect(hintsFor("cat x", ["read", "bash"])).toHaveLength(1);
   });
 
-  test("reminders name only the active targets of a multi-target watch", () => {
+  test("python routes back to edit only, whatever else is active", () => {
     const both = hintsFor("python3 script.py", ["read", "edit", "bash"])[0];
-    expect(both).toContain("`read` tool to read and the `edit` tool to edit");
+    expect(both).toContain("`edit` tool to edit");
+    expect(both).not.toContain("`read`");
 
-    const readOnly = hintsFor("python3 script.py", ["read", "bash"])[0];
-    expect(readOnly).toContain("`read` tool to read");
-    expect(readOnly).not.toContain("`edit` tool");
+    // read-only toolset: python-as-reader is data processing, not sneaking
+    expect(hintsFor("python3 script.py", ["read", "bash"])).toEqual([]);
 
     const editOnly = hintsFor("python3 script.py", ["edit", "bash"])[0];
     expect(editOnly).toContain("`edit` tool to edit");
-    expect(editOnly).not.toContain("`read` tool");
+    expect(editOnly).not.toContain("`read`");
 
     expect(hintsFor("python3 script.py", ["bash"])).toEqual([]);
   });
 });
 
 describe("WATCHES", () => {
-  test("one watch per pre-configured tool, plus python for read+edit", () => {
+  test("one watch per pre-configured tool; edit gets shell and python", () => {
     expect(WATCHES).toHaveLength(7);
-    const byTargets = WATCHES.map((w) => w.targets.join("+"));
-    expect(byTargets).toEqual(["read", "edit", "write", "grep", "find", "ls", "read+edit"]);
+    expect(WATCHES.map((w) => w.targets.join("+"))).toEqual([
+      "read",
+      "edit",
+      "edit",
+      "write",
+      "grep",
+      "find",
+      "ls",
+    ]);
   });
 
   test("ALL_TARGETS covers every configured tool the extension can nudge toward", () => {
@@ -168,19 +175,11 @@ describe("WATCHES", () => {
   });
 
   test("every watch matches something", () => {
-    const probes: Record<string, string> = {
-      read: "cat x",
-      edit: "sed -i x",
-      write: "tee x",
-      grep: "grep x",
-      find: "find x",
-      ls: "ls x",
-      "read+edit": "python x",
-    };
-    for (const watch of WATCHES) {
-      expect(watch.trigger.test(probes[watch.targets.join("+")])).toBe(true);
+    const probes = ["cat x", "sed -i x", "python x", "tee x", "grep x", "find x", "ls x"];
+    WATCHES.forEach((watch, i) => {
+      expect(watch.trigger.test(probes[i])).toBe(true);
       expect(watch.offense).toMatch(/^[\w` ,+/-]+$/);
-    }
+    });
   });
 
   test("every message names its replacement tools", () => {
