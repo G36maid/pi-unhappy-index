@@ -1,85 +1,58 @@
 /**
  * pi-unhappy-index — a minimal pi coding agent extension.
  *
- * Watches bash results for commands that sneakily do, in the shell, what one
- * of pi's pre-configured tools exists to do, and prepends one short reminder
- * per caught watch so the model sees it. One watch per tool (read, edit,
- * write, grep, find, ls), with python classified under edit:
+ * Two watches, one nudge each:
  *
- *   read        cat / head / tail        → Use the `read` tool to read.
- *   edit        sed -i / perl -i         → Use the `edit` tool to edit.
- *   edit        python                   → Use the `edit` tool to edit.
- *   write       tee / dd of=             → Use the `write` tool to write.
- *   grep        grep / rg                → Use the `grep` tool to search.
- *   find        find / fd                → Use the `find` tool to find.
- *   ls          ls                       → Use the `ls` tool to list.
+ *   cat      → hint: Do not read files with `cat`. Use the `read` tool to read.
+ *   python   → hint: Do not edit files with `python`. Use the `edit` tool to edit.
  *
- * Watches arm from the live toolset, not a hardcoded list: every result
- * re-checks `pi.getActiveTools()`, and a watch is armed only while at least
- * one of its target tools is active. This mirrors pi's own system-prompt
- * rules, which sanction bash for file operations when the dedicated tools
- * are absent — pointing at a tool the model cannot call would be noise, and
- * an absent tool means nothing is being sneaked. It also keeps up with
- * dynamic loadouts (`setActiveTools`, package-registered tools) without a
- * reload. If the running core exposes no `getActiveTools()`, all watches
- * arm, matching the pre-toolset behavior.
+ * The python watch is the point: when the edit tool hits a wall (exact
+ * content match, stale after format/lint), the model reaches for a python
+ * heredoc, edits markdown badly, stops using edit for the rest of the
+ * session, and chains straight into git commit. Catching the heredoc is
+ * catching the loop at its head.
  *
- * Getting caught bumps the unhappy index: the first reminder line gets an
- * `[unhappy=N]` tag prepended, where N is the number of catches so far this
- * session (a command matching several watches still counts as one catch).
- * The index lives in memory — it resets on session start, on /reload, and
- * whenever the pi process restarts. No command analysis beyond the trigger
- * regexes, on purpose: a false trigger costs one line of tokens and nothing
- * else — the command still runs and its output is preserved.
+ * That is the whole feature, and the list stays at two on purpose. It is
+ * not enforcement — on Linux any of this can be bypassed, and the set of
+ * bash usages that would actually make the owner happy cannot be
+ * enumerated, so there is nothing precise to implement. A false trigger
+ * costs one line of tokens; a missing trigger costs nothing. The only
+ * output is expression: each caught command gets its reminder prepended,
+ * with an `[unhappy=N]` tag on the first line, N = catches so far this
+ * session. A minimal list keeps that counter counting the thing that
+ * matters.
+ *
+ * Watches arm from the live toolset: each result re-checks
+ * `pi.getActiveTools()`, and a watch only fires while its target tool is
+ * active — pi's own rules sanction bash for file operations when the
+ * dedicated tools are absent, and a hint pointing at a tool the model
+ * cannot call is noise. If the running core exposes no `getActiveTools()`,
+ * both watches arm. The index lives in memory: reset on session start,
+ * /reload, or process restart. No command analysis beyond the trigger
+ * regexes.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export interface Watch {
-  /** Pi tools this watch routes back to; armed while at least one is active. */
-  targets: string[];
+  /** The pi tool this watch routes back to; armed while it is active. */
+  target: string;
   /** Matched against the bash command; a match fires the reminder. */
   trigger: RegExp;
   /** What the command was doing in the shell instead. */
   offense: string;
 }
 
-/** One watch per route back to a pre-configured tool; array order is the prepend order. */
+/** One watch per crime: cat stands in for read, python (heredoc after an edit wall) for edit. */
 export const WATCHES: Watch[] = [
   {
-    targets: ["read"],
-    trigger: /\b(?:cat|head|tail)\b/,
-    offense: "read files with `cat`, `head`, or `tail`",
+    target: "read",
+    trigger: /\bcat\b/,
+    offense: "read files with `cat`",
   },
   {
-    targets: ["edit"],
-    trigger:
-      /\bsed\b[^|;&>]*\s(?:-i\b|--in-place\b)|\bperl\d*\b[^|;&>]*\s-(?:pin|pi|i)\b/,
-    offense: "edit files in place with `sed` or `perl`",
-  },
-  {
-    targets: ["edit"],
+    target: "edit",
     trigger: /\bpython3?\b/,
     offense: "edit files with `python`",
-  },
-  {
-    targets: ["write"],
-    trigger: /\btee\b|\bdd\b[^|;&>]*\bof=/,
-    offense: "create or overwrite files with `tee` or `dd`",
-  },
-  {
-    targets: ["grep"],
-    trigger: /\bgrep\b|\brg\b/,
-    offense: "search files with `grep` or `rg`",
-  },
-  {
-    targets: ["find"],
-    trigger: /\bfind\b|\bfd\b/,
-    offense: "search for files with `find` or `fd`",
-  },
-  {
-    targets: ["ls"],
-    trigger: /\bls\b/,
-    offense: "list directories with `ls`",
   },
 ];
 
@@ -87,33 +60,19 @@ export const WATCHES: Watch[] = [
 const PURPOSE: Record<string, string> = {
   read: "to read",
   edit: "to edit",
-  write: "to write",
-  grep: "to search",
-  find: "to find",
-  ls: "to list",
 };
-
-/** Every tool some watch points at; hintsFor arms all of them when the active set is unknown. */
-export const ALL_TARGETS: string[] = [...new Set(WATCHES.flatMap((watch) => watch.targets))];
 
 /**
  * The reminder lines this command deserves, in WATCHES order, from armed
- * watches only. Without `activeTools` every watch is armed; with a set (even
- * empty) only watches whose targets intersect it fire, and their reminders
- * name just the tools that are actually active.
+ * watches only. Without `activeTools` both watches arm; with a set (even
+ * empty) a watch fires only when its target is in it.
  */
 export function hintsFor(command: unknown, activeTools?: Iterable<string>): string[] {
   if (typeof command !== "string") return [];
-  const active = new Set(activeTools ?? ALL_TARGETS);
-  return WATCHES.filter((watch) => watch.targets.some((tool) => active.has(tool)))
-    .filter((watch) => watch.trigger.test(command))
-    .map((watch) => {
-      const use = watch.targets
-        .filter((tool) => active.has(tool))
-        .map((tool) => `the \`${tool}\` tool ${PURPOSE[tool] ?? ""}`.trimEnd())
-        .join(" and ");
-      return `hint: Do not ${watch.offense}. Use ${use}.`;
-    });
+  const active = new Set(activeTools ?? WATCHES.map((w) => w.target));
+  return WATCHES.filter((w) => active.has(w.target))
+    .filter((w) => w.trigger.test(command))
+    .map((w) => `hint: Do not ${w.offense}. Use the \`${w.target}\` tool ${PURPOSE[w.target]}.`);
 }
 
 export default function (pi: ExtensionAPI) {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { default as unhappyIndex, ALL_TARGETS, WATCHES, hintsFor } from "../pi-unhappy-index";
+import { default as unhappyIndex, WATCHES, hintsFor } from "../pi-unhappy-index";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 describe("hintsFor", () => {
@@ -7,79 +7,11 @@ describe("hintsFor", () => {
     for (const cmd of ["cat /etc/hostname", "echo hi | cat", "cat > out.md <<'EOF'\nbody\nEOF"]) {
       const hints = hintsFor(cmd);
       expect(hints).toHaveLength(1);
-      expect(hints[0]).toContain("read files with `cat`");
-      expect(hints[0]).toContain("`read`");
-      expect(hints[0]).not.toContain("`edit`");
-      expect(hints[0]).not.toContain("`grep`");
+      expect(hints[0]).toBe("hint: Do not read files with `cat`. Use the `read` tool to read.");
     }
   });
 
-  test("head and tail also fire the read hint", () => {
-    for (const cmd of ["head -50 log.txt", "tail -n 20 app.log", "tail -f /var/log/syslog"]) {
-      const hints = hintsFor(cmd);
-      expect(hints).toHaveLength(1);
-      expect(hints[0]).toContain("`read`");
-    }
-  });
-
-  test("sed -i and perl -i fire the edit hint, plain filters do not", () => {
-    for (const cmd of [
-      "sed -i 's/foo/bar/' config.yaml",
-      "sed -i.bak 's/foo/bar/' f.txt",
-      "sed --in-place 's/a/b/' f",
-      "perl -i -pe 's/a/b/' f.txt",
-      "perl -pi -e 's/a/b/' f.txt",
-      "perl -pin -e 's/a/b/' f.txt",
-    ]) {
-      const hints = hintsFor(cmd);
-      expect(hints).toHaveLength(1);
-      expect(hints[0]).toContain("edit files in place");
-      expect(hints[0]).toContain("`edit`");
-    }
-    for (const cmd of ["echo x | sed s/a/b/", "sed -n '1,20p' file", "perl -pe 's/a/b/' in > out"]) {
-      expect(hintsFor(cmd)).toEqual([]);
-    }
-  });
-
-  test("tee and dd of= fire the write hint, plain filters do not", () => {
-    for (const cmd of ["echo hi | tee out.txt", "tee -a append.log", "dd if=/dev/zero of=f bs=1M count=1"]) {
-      const hints = hintsFor(cmd);
-      expect(hints).toHaveLength(1);
-      expect(hints[0]).toContain("create or overwrite files");
-      expect(hints[0]).toContain("`write`");
-    }
-    expect(hintsFor("dd if=f")).toEqual([]);
-    expect(hintsFor("docker ps | wc -l")).toEqual([]); // no tee/dd at all
-  });
-
-  test("grep and rg fire only the search hint", () => {
-    for (const cmd of ["grep -rn TODO src", "git grep fixpoint", "rg -n 'foo bar' src/", "ps aux | grep node"]) {
-      const hints = hintsFor(cmd);
-      expect(hints).toHaveLength(1);
-      expect(hints[0]).toContain("search files with `grep` or `rg`");
-      expect(hints[0]).toContain("`grep` tool");
-      expect(hints[0]).not.toContain("`read`");
-    }
-  });
-
-  test("find and fd fire only the find hint", () => {
-    for (const cmd of ["find src -name '*.ts'", "fd ts src/", "find . -maxdepth 2 -type d"]) {
-      const hints = hintsFor(cmd);
-      expect(hints).toHaveLength(1);
-      expect(hints[0]).toContain("search for files with `find` or `fd`");
-      expect(hints[0]).toContain("`find` tool");
-    }
-    expect(hintsFor("fdisk -l")).toEqual([]);
-  });
-
-  test("ls fires the ls hint", () => {
-    const hints = hintsFor("ls -la src/");
-    expect(hints).toHaveLength(1);
-    expect(hints[0]).toContain("list directories with `ls`");
-    expect(hints[0]).toContain("`ls` tool");
-  });
-
-  test("python fires only the python hint, in any common spelling", () => {
+  test("python fires only the edit hint, in any common spelling", () => {
     for (const cmd of [
       "python3 -c 'print(1)'",
       "python - <<'EOF'\nprint(1)\nEOF",
@@ -88,27 +20,37 @@ describe("hintsFor", () => {
     ]) {
       const hints = hintsFor(cmd);
       expect(hints).toHaveLength(1);
-      expect(hints[0]).toContain("edit files with `python`");
-      expect(hints[0]).toContain("`edit` tool to edit");
-      expect(hints[0]).not.toContain("`read`");
-      expect(hints[0]).not.toContain("`grep`");
+      expect(hints[0]).toBe("hint: Do not edit files with `python`. Use the `edit` tool to edit.");
     }
   });
 
-  test("a command matching several watches gets one hint per watch", () => {
-    expect(hintsFor("cat data.csv | grep header")).toHaveLength(2);
-    expect(hintsFor("python3 script.py && rg TODO")).toHaveLength(2);
-    expect(hintsFor("find . -name '*.log' | xargs tail -1")).toHaveLength(2);
-    expect(hintsFor("ps aux | grep node | tee /tmp/ps.txt")).toHaveLength(2);
+  test("nothing else is watched — grep, find, ls, head/tail, sed -i are the happy path", () => {
+    for (const cmd of [
+      "grep -rn TODO src",
+      "rg pattern src/",
+      "ps aux | grep node",
+      "find src -name '*.ts'",
+      "ls -la",
+      "head -50 log.txt",
+      "tail -n 20 app.log",
+      "sed -i 's/a/b/' f",
+      "echo x | tee out.txt",
+    ]) {
+      expect(hintsFor(cmd)).toEqual([]);
+    }
+  });
+
+  test("a command matching both watches gets one hint per watch", () => {
+    const hints = hintsFor("cat config.yaml && python3 fix.py");
+    expect(hints).toHaveLength(2);
+    expect(hints[0]).toContain("`read` tool to read");
+    expect(hints[1]).toContain("`edit` tool to edit");
   });
 
   test("does not fire on word fragments", () => {
     expect(hintsFor("echo category")).toEqual([]);
     expect(hintsFor("concat a b")).toEqual([]);
-    expect(hintsFor("echo grepapp")).toEqual([]);
-    expect(hintsFor("egrep a b")).toEqual([]);
     expect(hintsFor("borg backup /srv")).toEqual([]);
-    expect(hintsFor("printf '%s' headset")).toEqual([]);
     expect(hintsFor("npm run build")).toEqual([]);
     expect(hintsFor("git commit -m 'x'")).toEqual([]);
   });
@@ -120,77 +62,30 @@ describe("hintsFor", () => {
 });
 
 describe("arming from the active toolset", () => {
-  test("without an active set, every watch is armed (standalone use)", () => {
+  test("without an active set, both watches arm (standalone use)", () => {
     expect(hintsFor("cat x")).toHaveLength(1);
-    expect(hintsFor("ls -la")).toHaveLength(1);
-    expect(hintsFor("rg x")).toHaveLength(1);
+    expect(hintsFor("python3 x")).toHaveLength(1);
   });
 
   test("an empty active set arms nothing", () => {
     expect(hintsFor("cat x", [])).toEqual([]);
-    expect(hintsFor("rg x", [])).toEqual([]);
+    expect(hintsFor("python3 x", [])).toEqual([]);
   });
 
-  test("a watch is armed only while at least one of its targets is active", () => {
-    const full = ["read", "bash", "edit", "write", "grep", "find", "ls"];
-    expect(hintsFor("rg TODO", full)).toHaveLength(1);
-    // grep inactive: pi's own rules sanction bash rg then — no hint, no nudge to a dead tool
-    expect(hintsFor("rg TODO", ["read", "bash", "edit", "write", "find"])).toEqual([]);
-    expect(hintsFor("cat x", ["bash", "grep"])).toEqual([]);
+  test("a watch fires only while its target tool is active", () => {
     expect(hintsFor("cat x", ["read", "bash"])).toHaveLength(1);
-  });
-
-  test("python is classified under edit, like any watch targets its tool", () => {
-    const armed = hintsFor("python3 script.py", ["read", "edit", "bash"])[0];
-    expect(armed).toContain("`edit` tool to edit");
-    expect(armed).not.toContain("`read`");
-
-    // edit tool inactive: the python watch sits it out, same rule as every watch
-    expect(hintsFor("python3 script.py", ["read", "bash"])).toEqual([]);
-
-    expect(hintsFor("python3 script.py", ["bash"])).toEqual([]);
+    expect(hintsFor("cat x", ["bash"])).toEqual([]); // read absent: bash is sanctioned
+    expect(hintsFor("python3 x", ["read", "bash"])).toEqual([]); // edit absent
+    expect(hintsFor("python3 x", ["edit", "bash"])).toHaveLength(1);
   });
 });
 
 describe("WATCHES", () => {
-  test("one watch per pre-configured tool; edit gets shell and python", () => {
-    expect(WATCHES).toHaveLength(7);
-    expect(WATCHES.map((w) => w.targets.join("+"))).toEqual([
-      "read",
-      "edit",
-      "edit",
-      "write",
-      "grep",
-      "find",
-      "ls",
-    ]);
-  });
-
-  test("ALL_TARGETS covers every configured tool the extension can nudge toward", () => {
-    expect(ALL_TARGETS).toEqual(["read", "edit", "write", "grep", "find", "ls"]);
-  });
-
-  test("every watch matches something", () => {
-    const probes = ["cat x", "sed -i x", "python x", "tee x", "grep x", "find x", "ls x"];
-    WATCHES.forEach((watch, i) => {
-      expect(watch.trigger.test(probes[i])).toBe(true);
-      expect(watch.offense).toMatch(/^[\w` ,+/-]+$/);
-    });
-  });
-
-  test("every message names its replacement tools", () => {
-    const all = ALL_TARGETS;
-    for (const hints of [
-      hintsFor("cat x", all),
-      hintsFor("sed -i x", all),
-      hintsFor("tee x", all),
-      hintsFor("grep x", all),
-      hintsFor("find x", all),
-      hintsFor("ls x", all),
-      hintsFor("python x", all),
-    ]) {
-      expect(hints[0]).toMatch(/Use the `[\w]+` tool/);
-    }
+  test("exactly two watches: cat -> read, python -> edit", () => {
+    expect(WATCHES).toHaveLength(2);
+    expect(WATCHES.map((w) => w.target)).toEqual(["read", "edit"]);
+    expect(WATCHES[0].trigger.test("cat x")).toBe(true);
+    expect(WATCHES[1].trigger.test("python3 x")).toBe(true);
   });
 });
 
@@ -210,7 +105,7 @@ type ToolResultEvent = {
 type Handler = (event: ToolResultEvent, ctx?: unknown) => Promise<undefined | { content: TextBlock[] }>;
 
 /** Load the extension against a fake pi and return its registered handlers plus a loadout setter. */
-function load(active: string[] = ALL_TARGETS): {
+function load(active: string[] = ["read", "edit", "bash"]): {
   handlers: Map<string, Handler>;
   setActive: (tools: string[]) => void;
 } {
@@ -239,13 +134,13 @@ describe("unhappy index", () => {
     expect(first[0].text).toContain("[unhappy=1]");
     expect(first[1].text).toBe("file contents");
 
-    const second = (await onToolResult(baseEvent("rg pattern src/")))!.content;
+    const second = (await onToolResult(baseEvent("python3 fix.py")))!.content;
     expect(second[0].text).toContain("[unhappy=2]");
   });
 
-  test("a command matching several watches counts as one catch, tag on the first line", async () => {
+  test("a command matching both watches counts as one catch, tag on the first line", async () => {
     const onToolResult = load().handlers.get("tool_result")!;
-    const content = (await onToolResult(baseEvent("cat data.csv | grep header")))!.content;
+    const content = (await onToolResult(baseEvent("cat config.yaml && python3 fix.py")))!.content;
     expect(content).toHaveLength(3);
     expect(content[0].text).toContain("[unhappy=1]");
     expect(content[1].text).not.toContain("[unhappy=");
@@ -256,8 +151,9 @@ describe("unhappy index", () => {
     const onToolResult = load().handlers.get("tool_result")!;
     expect(await onToolResult(baseEvent("echo hello"))).toBeUndefined();
     expect(await onToolResult(baseEvent("git status -sb"))).toBeUndefined();
+    expect(await onToolResult(baseEvent("rg pattern src/"))).toBeUndefined();
 
-    const content = (await onToolResult(baseEvent("grep -rn TODO src")))!.content;
+    const content = (await onToolResult(baseEvent("cat /etc/hostname")))!.content;
     expect(content[0].text).toContain("[unhappy=1]"); // still the first catch
   });
 
@@ -272,29 +168,26 @@ describe("unhappy index", () => {
   });
 
   test("arming follows the live loadout between calls", async () => {
-    const { handlers, setActive } = load(["read", "bash", "edit", "write", "grep", "find"]);
+    const { handlers, setActive } = load(["read", "edit", "bash"]);
     const onToolResult = handlers.get("tool_result")!;
 
-    const caught = (await onToolResult(baseEvent("rg TODO src")))!.content;
+    const caught = (await onToolResult(baseEvent("python3 - <<'EOF'\nopen('f','w').write('x')\nEOF")))!.content;
     expect(caught[0].text).toContain("[unhappy=1]");
 
-    // grep tool deactivated: bash rg is sanctioned now — no hint, no bump
-    setActive(["read", "bash", "edit", "write", "find"]);
-    expect(await onToolResult(baseEvent("rg TODO src"))).toBeUndefined();
+    setActive(["read", "bash"]); // edit tool gone: python heredoc is sanctioned now
+    expect(await onToolResult(baseEvent("python3 - <<'EOF'\nprint(1)\nEOF"))).toBeUndefined();
 
-    // read still active: cat still gets caught, index unchanged by the skipped rg
     const caught2 = (await onToolResult(baseEvent("cat /etc/hostname")))!.content;
     expect(caught2[0].text).toContain("[unhappy=2]");
   });
 
-  test("a missing getActiveTools arms everything, like the pre-toolset behavior", async () => {
+  test("a missing getActiveTools arms everything", async () => {
     const handlers = new Map<string, Handler>();
     unhappyIndex({
       on: (name: string, handler: Handler) => handlers.set(name, handler),
     } as unknown as ExtensionAPI);
-    const content = (await handlers.get("tool_result")!(baseEvent("ls -la")))!.content;
+    const content = (await handlers.get("tool_result")!(baseEvent("python3 x")))!.content;
     expect(content[0].text).toContain("[unhappy=1]");
-    expect(content[0].text).toContain("`ls` tool");
   });
 
   test("session_start resets the index", async () => {
